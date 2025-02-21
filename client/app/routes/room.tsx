@@ -5,21 +5,11 @@ import { io } from "socket.io-client";
 import { ChatMessage } from "~/components/ChatMessage";
 import { ChatInput } from "~/components/ChatInput";
 import SequenceStep from "~/components/SequenceStep";
-
-
-type Message = {
-  content: string;
-  role: "assistant" | "user";
-};
-
-type Step = {
-  description: string;
-  id: number;
-};
-type Sequence = {
-  id: number;
-  steps: Step[];
-};
+import type { Message, Sequence } from "~/types/types";
+import createSequence from "~/api/createSequence";
+import fetchSequence from "~/api/fetchSequence";
+import updateSequence from "~/api/updateSequence";
+import fetchThreadMessages from "~/api/fetchThreadMessages";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -30,8 +20,7 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Room({ params }: Route.ComponentProps) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [sequence, setSequence] = useState<Sequence | null>(initialSequence);
-
+  const [sequence, setSequence] = useState<Sequence | null>(null);
 
   const room = params.room;
 
@@ -44,12 +33,20 @@ export default function Room({ params }: Route.ComponentProps) {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [threadId, setThreadId] = useState("");
 
-	const socketio = io(socketURL);
+  const socketio = io(socketURL, {
+    auth: {
+      room: room,
+    },
+  });
   useEffect(() => {
-
-    socketio.on("connect", () => {
+    socketio.on("connect", async () => {
       setIsConnected(true);
+      // Check for existing sequence
       console.log("connected to socket");
+      console.log("looking for an existing thread");
+      fetchThreadMessages(room).then(setMessages);
+      console.log("looking for an existing sequence");
+      fetchSequence(room).then(setSequence);
     });
 
     socketio.on("refused", ({ message }: { message: string }) => {
@@ -67,13 +64,14 @@ export default function Room({ params }: Route.ComponentProps) {
     });
 
     // replaces the entire thread
-    socketio.on("thread_messages", (data: Message[]) => {
+    socketio.on("thread_update", (data: Message[]) => {
       console.log("received thread");
-			console.log(data)
+      console.log(data);
       setMessages(data);
+			fetchSequence(room).then(setSequence);
     });
-    socketio.on("sequence_update", (data) => {
-      console.log("received updated sequence", data);
+    socketio.on("sequence_update", ({ sequence }) => {
+      console.log("received updated sequence", sequence);
     });
     socketio.on("server_message", (data: Message) => {
       console.log("received server message", data);
@@ -85,24 +83,46 @@ export default function Room({ params }: Route.ComponentProps) {
       socketio.off("refused");
       socketio.off("disconnect");
       socketio.off("message");
-      socketio.off("thread_messages");
+      socketio.off("thread_update");
       socketio.off("server_message");
       socketio.off("sequence_update");
     };
   }, [threadId]);
 
   const sendMessage = (content: string) => {
-    let message = { content: content, author: "user" };
-    socketio.emit("message", { message, sequence });
+    let message = { content: content, role: "user" };
+    socketio.emit("message", message );
   };
 
-  function sendSequence() {
-    socketio.emit("sequence", sequence);
+  async function onNewSequence() {
+    const sequence = await createSequence(room);
+    setSequence(sequence);
   }
 
-  // update the description of a step
-  function onSave(newDescription: string) {
-    console.log(newDescription);
+  async function onUpdateSequence() {
+    const updatedSequence = await updateSequence(sequence);
+    setSequence(updatedSequence);
+  }
+
+  // Updates a step without saving it
+  function onStepChange(stepNumber: number, message: string) {
+    setSequence((prev) => ({
+      ...prev!,
+      steps: prev!.steps.map((step) =>
+        step.stepNumber === stepNumber ? { ...step, message } : step
+      ),
+    }));
+  }
+
+  // Add a step to sequence
+  function onAddStep() {
+    setSequence((prev) => ({
+      ...prev!,
+      steps: [
+        ...prev!.steps,
+        { stepNumber: prev!.steps.length + 1, message: "" },
+      ],
+    }));
   }
 
   return (
@@ -124,30 +144,50 @@ export default function Room({ params }: Route.ComponentProps) {
       <div className="flex flex-col flex-1 h-screen">
         <div className="m-2 rounded-lg border p-1 flex-1 flex flex-col">
           <h1>WORKSPACE</h1>
-          <h1 className="mt-4">Your Secquence</h1>
+
           <div>
-            {sequence &&
+            {sequence && (
+              <button
+                className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                onClick={onUpdateSequence}
+              >
+                Save
+              </button>
+            )}
+          </div>
+          <div>
+            {sequence?.id ? (
               sequence.steps.map((step) => (
                 <SequenceStep
-                  key={step.id}
-                  description={step.description}
-                  id={step.id}
-                  onSave={onSave}
+                  key={step.stepNumber}
+                  stepNumber={step.stepNumber}
+                  message={step.message}
+                  onStepChange={onStepChange}
                 />
-              ))}
-            {/*  steps displayed here */}
+              ))
+            ) : (
+              <>
+                <button
+                  className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                  onClick={onNewSequence}
+                >
+                  Start a new sequence
+                </button>
+              </>
+            )}
           </div>
+          {sequence && (
+            <div>
+              <button
+                className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                onClick={onAddStep}
+              >
+                Add Step
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
-
-const initialSequence: Sequence = {
-  id: 1,
-  steps: [
-    { id: 1, description: "Step 1 description" },
-    { id: 2, description: "Step 2 description" },
-    { id: 3, description: "Step 3 description" },
-  ],
-};
