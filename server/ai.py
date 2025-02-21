@@ -54,14 +54,17 @@ def do_run(thread_id):
     sequence = get_sequence(thread_id)
     print('SEQUENCE:')
     print(sequence)
-
+    currentSequence = {
+        "id": sequence.id,
+        "steps": sequence.steps,
+    } if sequence else None
     try:
         response = client.beta.threads.runs.create_and_poll(
             thread_id=thread_id,
             assistant_id=assistant_id,
             poll_interval_ms=2000,
             additional_instructions=f'''
-            This is the current sequence: {sequence}''',
+            This is the current sequence: {currentSequence}''',
         )
         print('RUN RESPONSE')
         print(response.id)
@@ -86,7 +89,7 @@ def do_run(thread_id):
                         arguments = json.loads(rawArguments)
 
                         sequence = create_sequence(
-                            thread_id=thread_id, steps=arguments["steps"]
+                            room=thread_id, steps=arguments["steps"]
                         )
                         print("CREATE SEQUENCE OUTPUT:")
                         print(f"sequence id: {sequence.id}")
@@ -99,7 +102,9 @@ def do_run(thread_id):
                     except KeyError as e:
                         sequence = "Missing required argument: {e}", 400
                     finally:
-                        print(f"JSON DUMP steps: {json.dumps(sequence.steps)}")
+                        print(
+                            f"JSON DUMP sequence: {json.dumps({"id": sequence.id, "steps": sequence.steps})}"
+                        )
                         # Send the response back to the function calling tool
                         response = client.beta.threads.runs.submit_tool_outputs(
                             thread_id=response.thread_id,
@@ -108,8 +113,8 @@ def do_run(thread_id):
                                 {
                                     "tool_call_id": tool_call.id,
                                     "output": json.dumps(
-                                        sequence.steps
-                                    ),  # pass the response from your function to openai, so it knows if everything worked fine, or happens with me a lot, some arguments was invalid or filled with a placeholder.
+                                        {"id": sequence.id, "steps": sequence.steps}
+                                    ),
                                 }
                             ],
                         )
