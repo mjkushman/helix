@@ -22,7 +22,7 @@ export function ChatInput({ onSendMessage }: ChatInputProps) {
                 placeholder="Type your message..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={(e) => {
+                onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                         handleSendMessage();
                     }
