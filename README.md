@@ -146,7 +146,7 @@ In mvp implementation, only message `threads` and outreach `sequences` are store
 4. IMPORTANT! In `ai.py`,  update the hardcoded assistant id using the id for your assistant:
 
     ```python
-    assistant_id = "asst_qgvWGy0bnKkfFcLuWATyfmZ1"  # Hardcoded assistant id
+    assistant_id = "ReplaceithYourAssistantId"  # Hardcoded assistant id
     ```
 
 5. **Run the server:**
