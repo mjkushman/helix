@@ -1,6 +1,6 @@
 import type { Route } from "./+types/home";
-import { useEffect, useState } from "react";
-import fetchRoom from "~/api/fetchRoom";
+import { useState } from "react";
+import createRoom from "~/api/fetchRoom";
 
 import { Navigate } from "react-router";
 
@@ -15,7 +15,7 @@ export default function Home() {
   const [room, setRoom] = useState<string>();
 
   function handleStartChat() {
-    fetchRoom().then(setRoom);
+    createRoom().then(setRoom);
   }
 
   return (

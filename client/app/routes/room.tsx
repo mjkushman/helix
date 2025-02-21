@@ -1,5 +1,5 @@
 import type { Route } from "./+types/room";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
 import { ChatMessage } from "~/components/ChatMessage";
@@ -60,7 +60,7 @@ export default function Room({ params }: Route.ComponentProps) {
 
     socketio.on("message", (data: Message) => {
       console.log("received message", data);
-      setMessages((prev) => [...prev, data]);
+      setMessages((prev) => [data, ...prev]);
     });
 
     // replaces the entire thread
@@ -68,7 +68,7 @@ export default function Room({ params }: Route.ComponentProps) {
       console.log("received thread");
       console.log(data);
       setMessages(data);
-			fetchSequence(room).then(setSequence);
+      fetchSequence(room).then(setSequence);
     });
     socketio.on("sequence_update", ({ sequence }) => {
       console.log("received updated sequence", sequence);
@@ -91,7 +91,7 @@ export default function Room({ params }: Route.ComponentProps) {
 
   const sendMessage = (content: string) => {
     let message = { content: content, role: "user" };
-    socketio.emit("message", message );
+    socketio.emit("message", message);
   };
 
   async function onNewSequence() {
@@ -101,6 +101,7 @@ export default function Room({ params }: Route.ComponentProps) {
 
   async function onUpdateSequence() {
     const updatedSequence = await updateSequence(sequence);
+    updateSequence(sequence).then(setSequence);
     setSequence(updatedSequence);
   }
 
@@ -124,17 +125,25 @@ export default function Room({ params }: Route.ComponentProps) {
       ],
     }));
   }
+  const messagesEndRef = useRef(null);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   return (
     <div className="flex flex-row h-screen w-screen ">
-      <div className="flex flex-col max-w-1/3 h-screen">
-        <div className="m-2 rounded-lg border p-1 flex-1 flex flex-col">
-          {isConnected ? <h1>CHAT</h1> : <div>CONNECTING</div>}
-          <div className="overflow-y-auto flex-1 bg-green-200 flex flex-col">
+      <div className="flex flex-col min-w-sm max-w-lg h-screen">
+        <div className="m-2 rounded-lg border p-1 flex-1 flex flex-col max-h-screen">
+          <h1 className="self-center">
+            {" "}
+            CHAT {isConnected ? "CONNECTED" : "CONNECTING..."}
+          </h1>
+          <div className="overflow-y-auto bg-blue-100 flex flex-col-reverse flex-grow">
             {messages &&
               messages.map((m, index) => (
                 <ChatMessage key={index} content={m.content} role={m.role} />
               ))}
+            <div ref={messagesEndRef} /> {/* Invisible element for scrolling */}
           </div>
           <div className="relative mt-auto">
             <ChatInput onSendMessage={(message) => sendMessage(message)} />
@@ -143,8 +152,39 @@ export default function Room({ params }: Route.ComponentProps) {
       </div>
       <div className="flex flex-col flex-1 h-screen">
         <div className="m-2 rounded-lg border p-1 flex-1 flex flex-col">
-          <h1>WORKSPACE</h1>
+          <h1 className="self-center"> WORKSPACE</h1>
 
+          <div className="flex flex-col h-full">
+            {sequence?.id ? (
+              <div>
+                {sequence.steps.map((step) => (
+                  <SequenceStep
+                    key={step.stepNumber}
+                    stepNumber={step.stepNumber}
+                    message={step.message}
+                    onStepChange={onStepChange}
+                  />
+                ))}
+
+                <button
+                  className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                  onClick={onAddStep}
+                >
+                  Add Step
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col h-full items-center justify-center">
+                <button
+                  className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                  onClick={onNewSequence}
+                >
+                  Start a new sequence
+                </button>
+                <p>Or ask the assistant to create one for you</p>
+              </div>
+            )}
+          </div>
           <div>
             {sequence && (
               <button
@@ -155,37 +195,6 @@ export default function Room({ params }: Route.ComponentProps) {
               </button>
             )}
           </div>
-          <div>
-            {sequence?.id ? (
-              sequence.steps.map((step) => (
-                <SequenceStep
-                  key={step.stepNumber}
-                  stepNumber={step.stepNumber}
-                  message={step.message}
-                  onStepChange={onStepChange}
-                />
-              ))
-            ) : (
-              <>
-                <button
-                  className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                  onClick={onNewSequence}
-                >
-                  Start a new sequence
-                </button>
-              </>
-            )}
-          </div>
-          {sequence && (
-            <div>
-              <button
-                className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                onClick={onAddStep}
-              >
-                Add Step
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>
