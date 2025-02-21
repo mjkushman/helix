@@ -34,10 +34,10 @@ def add_thread_message(thread_id, role, content):
         return None
 
 
-# Fetches the thead messages
+# Fetches the thead messages from openai
 def fetch_thread_messages(thread_id):
     try:
-        response = client.beta.threads.messages.list(thread_id, order="asc")
+        response = client.beta.threads.messages.list(thread_id, order="desc")
         print(response.data)
         formatted_list = format_messages(response.data)
         print("THREAD MESSAGES")
@@ -90,6 +90,48 @@ def do_run(thread_id):
 
                         sequence = create_sequence(
                             room=thread_id, steps=arguments["steps"]
+                        )
+                        print("CREATE SEQUENCE OUTPUT:")
+                        print(f"sequence id: {sequence.id}")
+                        print(F"sequence steps: {sequence.steps}")
+
+                        # tool_output = output["response"]
+
+                    except json.JSONDecodeError as e:
+                        sequence = "JSONDecodeError: " + str(e), 400
+                    except KeyError as e:
+                        sequence = "Missing required argument: {e}", 400
+                    finally:
+                        print(
+                            f"JSON DUMP sequence: {json.dumps({"id": sequence.id, "steps": sequence.steps})}"
+                        )
+                        # Send the response back to the function calling tool
+                        response = client.beta.threads.runs.submit_tool_outputs(
+                            thread_id=response.thread_id,
+                            run_id=response.id,
+                            tool_outputs=[
+                                {
+                                    "tool_call_id": tool_call.id,
+                                    "output": json.dumps(
+                                        {"id": sequence.id, "steps": sequence.steps}
+                                    ),
+                                }
+                            ],
+                        )
+                if (
+                    tool_call.function.name == "update_sequence"
+                ):  # name of your function call
+                    print('REQUESTED UPDATE_SEQUENCE TOOL CALL')
+
+                    # Arguments returned by llm
+                    rawArguments = tool_call.function.arguments
+
+                    # response from function calling
+                    try:
+                        arguments = json.loads(rawArguments)
+
+                        sequence = update_sequence(
+                            id=arguments["id"], steps=arguments["steps"]
                         )
                         print("CREATE SEQUENCE OUTPUT:")
                         print(f"sequence id: {sequence.id}")

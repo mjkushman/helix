@@ -1,9 +1,7 @@
-from concurrent.futures import thread
-import json
 from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 from flask_session import Session
-from flask_socketio import SocketIO, emit, join_room, send
+from flask_socketio import SocketIO, emit, join_room
 from sequence import create_sequence, get_sequence, update_sequence
 from dotenv import load_dotenv
 from ai import (
@@ -25,33 +23,28 @@ Session(app)
 load_dotenv()
 
 # app.config['SECRET_KEY'] = '123'
-io = SocketIO(app, cors_allowed_origins="http://localhost:5173", logger=True)
+io = SocketIO(app, cors_allowed_origins="http://localhost:5173", logger=False)
 
 rooms = {}
 
 
-# Home route should create a new thread and room, then redirect the user to that room's route
-@app.route("/", methods=["GET"])
+# Home route should create a new thread and room,
+# then redirect the user to that room's route
+@app.route("/", methods=["POST"])
 def index():
-
     room = session.get("room")
-
     print(f'got room {room}')
     if room:
         return jsonify(room)
-
     else:
         # Create a new thread on openai
-        session["mike"] = "hello"
         thread = create_thread()
-        # sequence = create_sequence(thread.id)
-
         room = thread.id  # the room is the thread id
         rooms[room] = {"members": 0}
         session["room"] = room  # Store the thread id in session
         session["thread"] = room  # Store the thread id in session again.
         # Return the room aka thread id
-        return jsonify({"room": room})
+        return jsonify({"room": room}), 201
 
 
 @app.route("/sequence/<thread_id>", methods=["GET"])
@@ -64,6 +57,7 @@ def handle_sequence(thread_id):
             return jsonify()
     else:
         return jsonify({"error": "Invalid request method"}), 405
+
 
 @app.route("/sequence/<int:id>", methods=["PATCH"])
 def handle_update_sequence(id):
@@ -78,6 +72,7 @@ def handle_update_sequence(id):
     else:
         return jsonify({"error": "Invalid request method"}), 405
 
+
 @app.route("/sequence", methods=["POST"])
 def handle_create_sequence():
     if request.method == "POST":
@@ -87,8 +82,17 @@ def handle_create_sequence():
         thread_id = json_data["thread_id"]
         sequence = create_sequence(thread_id)
         print("created", sequence.id, sequence.steps)
-
         return jsonify({"id": sequence.id, "steps": sequence.steps}), 201
+    else:
+        return jsonify({"error": "Invalid request method"}), 405
+
+
+# Gets the messages in a thread
+@app.route("/thread/<thread_id>", methods=["GET"])
+def handle_thread(thread_id):
+    if request.method == "GET":
+        thread_messages = fetch_thread_messages(thread_id)
+        return jsonify(thread_messages)
 
     else:
         return jsonify({"error": "Invalid request method"}), 405
@@ -98,7 +102,6 @@ def handle_create_sequence():
 @io.on('connect')
 def handle_connect(auth):
 
-    # room = request.args.get('room', None)
     room = auth['room']
     session['room'] = room
 
@@ -121,11 +124,9 @@ def handle_message(data):
     room = session.get("room")
     thread_id = room
 
-    print("MESSAGE SESSION ROOM")
-    print()
     #  Send the user's message back to the thread
     emit('message', {"role": role, "content": content}, to=room)
-    #  Send a messag back immediately to acknowledge receipt
+    #  Send a message back immediately to acknowledge receipt
     emit('message', {"role": "assistant", "content": "Working..."}, to=room)
 
     # Add the message to the thread
@@ -133,11 +134,6 @@ def handle_message(data):
 
     # Trigger a run
     do_run(thread_id)
-
-    #  get the updated sequence from db and emit back to client
-    # sequence = get_sequence(thread_id)
-    # print(f"getted sequence: {sequence}")
-    # emit('sequence_update', {"sequence": sequence}, to=thread_id)
 
     # emit back the entire thread
     thread_messages = fetch_thread_messages(thread_id)
