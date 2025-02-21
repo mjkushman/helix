@@ -1,5 +1,6 @@
 import type { Route } from "./+types/home";
 import { useEffect, useState } from "react";
+import fetchRoom from "~/api/fetchRoom";
 
 import { Navigate } from "react-router";
 
@@ -11,21 +12,26 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Home() {
-  const [room, setRoom] = useState<Promise<string>>();
-  async function fetchRoom() {
-    let response = await fetch("http://localhost:5000");
-    const room = await response.json();
-    setRoom(room);
+  const [room, setRoom] = useState<string>();
+
+  function handleStartChat() {
+    fetchRoom().then(setRoom);
   }
 
-  useEffect(() => {
-    fetchRoom();
-  }, []);
-
   return (
-    <div className="flex flex-row h-screen w-screen ">
-      {room && <Navigate to={`/${room}`} />} Loading...
+    <div className="flex flex-col h-screen w-screen items-center justify-center">
+      {room ? (
+        <Navigate to={`/${room}`} />
+      ) : (
+        <div>
+          <button
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+            onClick={handleStartChat}
+          >
+            Start a Chat
+          </button>{" "}
+        </div>
+      )}
     </div>
   );
 }
-// thread_zRuGyaJsRMXM7GjwOA4lZ2fC
